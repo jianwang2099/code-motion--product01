@@ -1,0 +1,123 @@
+{
+  "capturedAt": "2026-10-09（修订：钉相位容差 ±8 → ±4，重建图库）",
+  "capturedOn": "macOS + Microsoft Edge（--headless=new）",
+  "url": "http://127.0.0.1:5173/index.html",
+  "pinToleranceWorldPx": 4,
+  "pinSlackWorldPx": 3,
+  "tool": {
+    "node": "v22.23.1",
+    "entry": "node template/verify/visual/visual.js shoot --tol 4 --out <DIR>",
+    "baselineCommand": "node template/verify/visual/visual.js shoot --tol 4 --out /tmp/base-r2（然后把 *.png 复制进本目录）",
+    "note": "图库一次建库、一批抓齐；换批重抓会换 md5，须在本目录 README 里写清取代关系"
+  },
+  "compareCommand": "node template/verify/visual/visual.js compare --baseline template/verify/visual/baseline --actual <抓图目录>",
+  "noiseEnvelope": {
+    "note": "同一 baseline 与 6 次重跑实测（tol=4）",
+    "measured": {
+      "ready-square-center-1200x760.png": "0 / 0 / 381 / 381 / 381 / 381 像素（最坏 0.0418%）",
+      "ready-square-center-375x600.png": "0 / 0 / 128 / 128 / 128 / 128 像素（最坏 0.0569%）",
+      "destroyed-after-explosion-1200x760.png": "340 ×6 像素（最坏 0.0373%）"
+    }
+  },
+  "shots": [
+    {
+      "name": "ready-square-center-1200x760.png",
+      "bytes": 32716,
+      "md5": "7047fef40299417011f7efa526da2921",
+      "wantedViewport": "1200x760",
+      "measuredViewport": "1200x760",
+      "canvasCss": "1200x760",
+      "canvasBuffer": "1200x760",
+      "dpr": 1,
+      "pngSize": "1200x760",
+      "colorType": 2,
+      "filtered": {
+        "1": 22,
+        "2": 639,
+        "3": 2,
+        "4": 97
+      },
+      "phase": "ready",
+      "atPouch_or_atReady": true,
+      "squareAfterCapture": {
+        "x": -5.336846277297466,
+        "y": 159.6,
+        "dir": -1,
+        "state": "moving"
+      },
+      "pinnedBeforeFreeze": {
+        "x": 3.48,
+        "y": 159.6,
+        "dir": -1
+      },
+      "pinOk": true,
+      "prep": null
+    },
+    {
+      "name": "ready-square-center-375x600.png",
+      "bytes": 26107,
+      "md5": "de2c399019e4de4ecfbada4d9b32de5a",
+      "wantedViewport": "375x600",
+      "measuredViewport": "375x600",
+      "canvasCss": "375x600",
+      "canvasBuffer": "375x600",
+      "dpr": 1,
+      "pngSize": "375x600",
+      "colorType": 2,
+      "filtered": {
+        "1": 19,
+        "2": 490,
+        "3": 2,
+        "4": 89
+      },
+      "phase": "ready",
+      "atPouch_or_atReady": true,
+      "squareAfterCapture": {
+        "x": 0.6386394396236714,
+        "y": 126,
+        "dir": -1,
+        "state": "moving"
+      },
+      "pinnedBeforeFreeze": {
+        "x": 3.77,
+        "y": 126,
+        "dir": -1
+      },
+      "pinOk": true,
+      "prep": null
+    },
+    {
+      "name": "destroyed-after-explosion-1200x760.png",
+      "bytes": 32381,
+      "md5": "270de9e3f61bb2edd31e9be1b95960e4",
+      "wantedViewport": "1200x760",
+      "measuredViewport": "1200x760",
+      "canvasCss": "1200x760",
+      "canvasBuffer": "1200x760",
+      "dpr": 1,
+      "pngSize": "1200x760",
+      "colorType": 2,
+      "filtered": {
+        "1": 43,
+        "2": 563,
+        "3": 2,
+        "4": 152
+      },
+      "phase": "flying",
+      "atPouch_or_atReady": false,
+      "squareAfterCapture": {
+        "x": -43.73515483153439,
+        "y": 159.6,
+        "dir": -1,
+        "state": "destroyed"
+      },
+      "pinnedBeforeFreeze": null,
+      "pinOk": true,
+      "prep": {
+        "state": "destroyed",
+        "visible": 0,
+        "t": 0.6
+      }
+    }
+  ]
+}

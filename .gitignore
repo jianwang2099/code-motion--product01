@@ -1,0 +1,31 @@
+# 依赖与构建产物（若无构建步骤，这几行留作占位）
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# 系统与编辑器
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# 日志与临时产物
+*.log
+*.pid
+/tmp-*
+
+# 视觉门禁的**自造样本**产出：每次运行 `node verify/visual/visual-gate.js` 都会**按代码重新算一遍**
+# （无随机源 → 字节一致），属于可再生产物，不入库；门禁报告（JSON）同理。
+# ⚠️ 例外：`verify/visual/baseline/*.png` 是**真实页面的图库**，必须提交（见 verify/README.md）。
+verify/visual/visual-gate-out/
+
+# 视频流水线的中间产物：序列帧（N 张 PNG，可达数十 MB）由页面确定性重放出来，不入库。
+# 成片**不在这里忽略** —— 交付物应当进版本库（本模板的参考实现就把 video/out/*.mp4 提交了）；
+# 若你的成片体积大到不适合入库，由你自己的项目在这里再加一条忽略规则。
+/video/frames/
+
+# 注意：离线依赖目录（例如 vendor/）**必须提交**——离线可用是硬需求时，不要忽略它。
+# 注意：证据产出（verify/**/*.png、verify/**/*.json）**必须提交**——复核者要能重跑与比对。
+#       上面那两条（`verify/visual/visual-gate-out/` 与 `/video/frames/`）是**仅有的两条**例外，理由都是"由本仓库代码现算、不需要存档"。

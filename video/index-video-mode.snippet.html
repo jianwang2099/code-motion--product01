@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>视频渲染模式样板（可直接粘贴的片段）</title>
+</head>
+<body>
+<!--
+  ============================================================================
+  index-video-mode.snippet.html  —— 可直接粘贴进你的页面 <script> 的样板
+  ============================================================================
+  这不是文档，是**能跑的代码**：把下面 <script> 里的整段粘到你的页面脚本里
+  （放在你的场景/状态都初始化完之后），再做两处改动就能逐帧导出成片：
+
+    ▲改这里-1：reset() 里补上"你的动画回到第 0 帧初始态"需要复位的状态。
+    ▲改这里-2：如果你需要"脚本化输入"（拖拽 / 点击 / 按键），
+               在 setDrag() / release() / 可选的事件监听里接上**你已有的输入函数**；
+               不需要就把这两个方法和事件监听整段删掉（render-frames.js 只在 plan
+               里出现 {drag}/{release} 时才调它们）。
+
+  粘贴后你的页面应当满足（契约全文见 video/VIDEO-MODE-CONTRACT.md）：
+    1) 视频模式下不读挂钟（performance.now / Date.now / 真实 deltaTime 一律不驱动时间轴）；
+    2) 每帧推进**恰好整数个定长步**（下面 FIXED_DT + STEPS_PER_FRAME）；
+    3) reset() 廉价：不渲染、不重跑昂贵布局（离线求解会 reset 上千次）；
+    4) ?video=1 时才挂 window.__video；不带参数时页面行为与改造前逐字节等价。
+  ============================================================================
+-->
+<script>
+/* ===== 视频渲染模式（?video=1）· 粘贴块开始 ===== */
+(function () {
+  'use strict';
+
+  /* ---- 只读参数：查询串解析写成防御式，任何一步出错都退回默认模式 ---- */
+  var VIDEO_W = 1920, VIDEO_H = 1080;          // 固定输出分辨率
+  var VIDEO_FPS = 60;                          // 固定帧率
+  var VIDEO_DURATION_DEFAULT = 30;             // 默认时长（秒），可被 ?duration= 覆盖
+  var FIXED_DT = 1 / 120;                      // 定长物理/动画步长（秒）——不许读挂钟
+  var STEPS_PER_FRAME = Math.round((1 / VIDEO_FPS) / FIXED_DT);   // 每帧恰好整数步（60fps → 2）
+
+  var VIDEO_MODE = false, VIDEO_PARAMS = {};
+  try {
+    if (typeof location !== 'undefined' && location && typeof location.search === 'string') {
+      location.search.replace(/^[?]/, '').split('&').forEach(function (kv) {
+        if (!kv) return;
+        var eq = kv.indexOf('=');
+        var key = eq < 0 ? kv : kv.slice(0, eq);
+        var sval = eq < 0 ? '' : kv.slice(eq + 1);
+        try { VIDEO_PARAMS[decodeURIComponent(key)] = decodeURIComponent(sval); }
+        catch (e) { VIDEO_PARAMS[key] = sval; }      // 非法 % 转义：退化成原样，不抛
+      });
+      VIDEO_MODE = VIDEO_PARAMS.video === '1';
+    }
+  } catch (e) { VIDEO_MODE = false; }
+
+  var videoDuration = VIDEO_DURATION_DEFAULT;
+  if (VIDEO_MODE && VIDEO_PARAMS.duration !== undefined) {
+    var durParsed = parseFloat(VIDEO_PARAMS.duration);
+    if (isFinite(durParsed) && durParsed > 0) videoDuration = durParsed;
+  }
+  var videoFrameIndex = 0, videoSimSteps = 0;
+  function videoTotalFrames() { return Math.round(videoDuration * VIDEO_FPS); }
+
+  /* ▲改这里-1：把第 0 帧的初始态全部还原到这里（不要在这里渲染，也不要重跑昂贵布局） */
+  function reset() {
+    videoFrameIndex = 0;
+    videoSimSteps = 0;
+  }
+
+  /* 推进恰好 1/VIDEO_FPS 秒 —— **不渲染**。第 n 帧只由帧号决定，绝不用真实 deltaTime。 */
+  function stepFrame() {
+    for (var i = 0; i < STEPS_PER_FRAME; i++) {
+      var dt = FIXED_DT;
+      /* ▲改这里-1b：把你的时间轴推进写在这里，只用 dt 这个常量，不要读挂钟 */
+    }
+    videoFrameIndex++;
+    videoSimSteps += STEPS_PER_FRAME;
+  }
+
+  /* 快速推进 n 帧（不渲染）：给离线求解器一次跑几千帧用 */
+  function simulateFrames(n) {
+    var total = Math.max(0, Math.floor(n));
+    for (var i = 0; i < total; i++) stepFrame();
+  }
+
+  /* 把当前状态画出来（不推进时间）。DOM/CSS 页面就改成把状态写进 DOM/样式。 */
+  function render() {
+    /* ▲改这里-1c：render() 里只做"把当前状态画出来"，不许推进时间 */
+  }
+
+  /* 提交一帧：先 render()，再等 2 个 rAF —— 保证画面真上屏之后抓图时序才稳 */
+  function commit() {
+    return new Promise(function (resolve) {
+      render();
+      requestAnimationFrame(function () { requestAnimationFrame(function () { resolve(); }); });
+    });
+  }
+
+  /* 抓当前画面（canvas 页面适用）。DOM/CSS 页面不必实现 —— 渲染器默认走整屏截图。 */
+  function captureFrame() {
+    render();
+    var c = document.querySelector('canvas');
+    return c ? c.toDataURL('image/png') : null;
+  }
+
+  /* ---- 脚本化输入（可选）▲改这里-2：接上你自己已有的输入函数 ----
+     注意：**必须复用真人交互的同一条代码路径**，不要另写一套"脚本专用发射"，
+     否则导出的片子就不是这个页面真实的行为，两套逻辑也必然漂移。 */
+  var dragging = false;
+  function setDrag(dx, dy) {
+    dragging = true;
+    void dx; void dy;                 // ← 用 (dx,dy) 调你的 applyStretch / 等效函数
+  }
+  function release() {
+    dragging = false;
+    /* ← 调你的 releaseBall / 等效函数 */
+  }
+  void dragging;
+
+  /* 需要真人拖拽时打开这段（可选）：
+  document.addEventListener('pointerdown', function (ev) { setDrag(ev.clientX, ev.clientY); });
+  document.addEventListener('pointermove', function (ev) { if (dragging) setDrag(ev.clientX, ev.clientY); });
+  document.addEventListener('pointerup', function () { if (dragging) release(); }); */
+
+  /* ---- 出口契约：只有视频模式才挂 window.__video（默认模式下必须 undefined） ---- */
+  if (VIDEO_MODE) {
+    window.__video = {
+      get active() { return true; },
+      get fps() { return VIDEO_FPS; },
+      get width() { return VIDEO_W; },
+      get height() { return VIDEO_H; },
+      get duration() { return videoDuration; },
+      set duration(sec) {
+        var v = Number(sec);
+        if (isFinite(v) && v > 0) videoDuration = v;    // 非法值忽略，时间轴永远有限
+      },
+      get totalFrames() { return videoTotalFrames(); },
+      get frameIndex() { return videoFrameIndex; },
+      get simSteps() { return videoSimSteps; },
+      reset: reset,
+      setDrag: setDrag,
+      release: release,
+      stepFrame: stepFrame,
+      simulateFrames: simulateFrames,
+      render: render,
+      commit: commit,
+      captureFrame: captureFrame
+    };
+    /* 成片要干净：把调试浮层隐藏（带 ?hud=1 时保留，方便人工排查页面状态） */
+    var hudEl = document.querySelector('.hud');
+    if (hudEl && hudEl.style && VIDEO_PARAMS.hud !== '1') hudEl.style.display = 'none';
+    /* ⚠ 视频模式下**不要启动 rAF 主循环**：抓图本身会强制渲染，
+       自带主循环会让相位被额外推进、时间轴不再可复现。 */
+  }
+})();
+/* ===== 视频渲染模式粘贴块结束 ===== */
+</script>
+</body>
+</html>
