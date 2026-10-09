@@ -15,28 +15,36 @@
 | 落盘时间 | `2026-10-09`（执行方，在"卡 01 门禁全绿 + **PM 已验收通过**"之后落盘） |
 | 交付物 | `index.html` + `video/plan.js` + `video/out/periodic-table-24s.mp4`（均已产出并验收） |
 | **指纹（md5 + 行数）** | · 成片 `video/out/periodic-table-24s.mp4` md5 **`c0a0648900c1b50a50c4d12185581b09`**，**12487236** bytes = 11.91 MB<br>· `index.html` md5 `3c7e33df765ab613c3f7c1131eefc017`，**589** 行<br>· `video/plan.js` md5 `38a8935af2061adaf05c8672fc5a3870`，**48** 行<br>· `verify/card-01/gate.js` md5 `2c23ce6c29d0d5fc5ac3248c36192f25`，**288** 行<br>· `verify/card-01/video-frames-check.js` md5 `846788ebd11b3ddf7c14547f3b59679f`，**172** 行 |
-| **版本反查表** | · `e8cc155` = 模板骨架首次提交<br>· `319d6a2` = 卡 01 立项（审卡整改后 PM 确认下发）<br>· 卡 01 实现提交 + tag `v1-card01-periodic-table` = 见 `git log`（附注 tag 消息含成片 md5） |
+| **版本反查表** | · `e8cc155` = 模板骨架首次提交<br>· `319d6a2` = 卡 01 立项（审卡整改后 PM 确认下发）<br>· `fa958fd` = **卡 01 实现提交**（= tag `v1-card01-periodic-table` 解引用目标）<br>· `23204e4` = 台账验收落盘（docs） |
 | 已完成的卡 | `卡 01`（**PM 已验收通过**，2026-10-09） |
 | 已验收待 tag | `（无）` |
 | 下一张卡 | 待定：P1 字幕（烧画面/软轨）或 P2 配音评估（见 `ROADMAP.md`） |
-| 门禁计数（实测） | · `node verify/card-01/gate.js` → **46 passed, 0 failed**（exit 0）<br>· `node verify/card-01/gate.js`（run2 在场，C3 真比对）→ **47 passed, 1 failed**（唯一失败项为"run2 未删"，删除后转绿）<br>· `node verify/card-01/make-determinism-report.js` → **PASS**（两遍 manifest sha256 相同） |
+| 门禁计数（实测） | · `node verify/card-01/gate.js` → **46 passed, 0 failed**（exit 0，收尾态）<br>· `node verify/card-01/gate.js`（run2 在场，C3 真比对）→ **47 passed, 1 failed**（唯一失败项为"run2 未删"，删除后转绿）<br>· `node verify/card-01/make-determinism-report.js` → **PASS**（两遍 manifest sha256 相同） |
+| 运行 / 预览方式 | 静态预览页 `http://127.0.0.1:5174/index.html`；出片为素材页 `...?video=1&duration=24&fps=60`。服务是导演起的**受管后台作业**（`python3 -m http.server 5174 --bind 127.0.0.1`，cwd=工作区根），**不要重复启动** |
+| 权限 / 环境 | 沙箱 `danger-full-access`、审批 `ask`；Node v22.23.1 / ffmpeg+ffprobe 8.1.1 / 无头 Edge；**5173 被旧项目占用**。实测出片速度 **5.7 帧/s**（1440 帧 251 s）。远程 `origin = https://github.com/jianwang2099/code-motion--product01.git`（PM 配置） |
 
-### 收尾流水线实测（2026-10-09）
+### 收尾流水线实测（2026-10-09 · 六步全绿）
 
 | 步骤 | 命令 | 实测结果 |
 |---|---|---|
 | ① 功能分支提交 | `git commit` | `fa958fd feat(card-01): 《元素周期表简介》24 秒纯画面成片…` ✔ |
-| ② 附注 tag（指向**实现提交**） | `git tag -a v1-card01-periodic-table` | tag 对象 `727dc55`，`git rev-list -n1` → `fa958fd…`（= 实现提交，非其后的记录提交）✔ |
-| ③ 台账 docs 提交 | `git commit`（本条记录所在提交） | 见 `git log` ✔ |
-| ④ 显式推送分支 | `git push origin card/01-periodic-table-24s` | ✘ **exit 128**：`'origin' does not appear to be a git repository` |
-| ④ 显式推送 tag | `git -c http.version=HTTP/1.1 push origin v1-card01-periodic-table` | ✘ **exit 128**：同上 |
-| ⑤ `main --ff-only` | `git merge --ff-only` | 见下方"main 落地"行 |
-| ⑥ `ls-remote` 自证 | `git ls-remote --heads --tags origin` | ✘ **exit 128**：无 remote，无法自证 |
+| ② 附注 tag（指向**实现提交**） | `git tag -a v1-card01-periodic-table` | tag 对象 `727dc55`；`^{commit}` → `fa958fd…`（= 实现提交，非其后的记录提交）✔ |
+| ③ 台账 docs 提交 | `git commit` | `23204e4 docs(ledger): 卡 01 验收落盘…` ✔ |
+| ④ 显式推送分支 | `git push origin card/01-periodic-table-24s` | ✔ `[new branch]`（首次因 **HTTP2 framing layer**/连接超时失败，改 `-c http.version=HTTP/1.1` 并重试后成功） |
+| ④ 显式推送 tag | `git push origin v1-card01-periodic-table` | ✔ `[new tag] v1-card01-periodic-table` |
+| ⑤ `main --ff-only` | `git merge --ff-only card/01-periodic-table-24s` | ✔ `Updating 319d6a2..23204e4 Fast-forward`（exit 0） |
+| ⑥ `ls-remote` 自证 | `git ls-remote --heads --tags origin` | ✔ **exit 0**，原始输出见下 |
 
-**未完成项（如实记录）**：本仓库 **`git remote -v` 实测为空**，因此**第 ④/⑥ 步（显式推送 + `ls-remote` 自证）无法执行**。
-按全局铁律"**无法快进/无远程就停下来问人**"，此处**停下等 PM 给出远程地址**，不伪称已推送。
-| 运行 / 预览方式 | 静态预览页 `http://127.0.0.1:5174/index.html`；出片为素材页 `...?video=1&duration=24&fps=60`。服务是导演起的**受管后台作业**（`python3 -m http.server 5174 --bind 127.0.0.1`，cwd=工作区根），**不要重复启动** |
-| 权限 / 环境 | 沙箱 `danger-full-access`、审批 `ask`；Node v22.23.1 / ffmpeg+ffprobe 8.1.1 / 无头 Edge；**5173 被旧项目占用**。实测出片速度 **5.7 帧/s**（1440 帧 251 s） |
+**远程实测（`git ls-remote --heads --tags origin`，exit 0）**：
+
+```
+23204e471e7c4eedecd6ccda9c8740808ee97ed5	refs/heads/card/01-periodic-table-24s
+23204e471e7c4eedecd6ccda9c8740808ee97ed5	refs/heads/main
+727dc55d4de22adc55e7e3d788d190cd550b8823	refs/tags/v1-card01-periodic-table
+fa958fd8f0d9694b5b7d0a179d350b4525a700ed	refs/tags/v1-card01-periodic-table^{}
+```
+
+tag 的 `^{}` 行证明它指向实现提交 `fa958fd`，不是其后的记录提交。**六步全部完成，无遗留豁免。**
 
 > ⚠️ **不要照抄上表当断言依据。** 冷启动时以**实测值**为准，并按上表反查版本。
 

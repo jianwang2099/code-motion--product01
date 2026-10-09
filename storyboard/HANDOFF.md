@@ -23,7 +23,7 @@
 
 - **交付物**：`index.html`（589 行，canvas 2D 页面）+ `video/plan.js`（48 行）+ `video/out/periodic-table-24s.mp4`（11.91 MB，1440 帧）
 - **运行 / 预览**：静态预览页 `http://127.0.0.1:5174/index.html`；出片素材页 `…?video=1&duration=24&fps=60`（**受管后台作业，不要重复启动**）
-- **版本控制**：`main` + 功能分支 `card/01-periodic-table-24s`；tag `v1-card01-periodic-table`（附注，指向实现提交）
+- **版本控制**：`main`（= `23204e4`）+ 功能分支 `card/01-periodic-table-24s`；tag `v1-card01-periodic-table`（附注，指向实现提交 `fa958fd`）；**已推送 `origin`**（GitHub `jianwang2099/code-motion--product01`），`ls-remote` 实测自证 exit 0
 - **当前门禁**：`node verify/card-01/gate.js` → **46 passed / 0 failed**（exit `0`）
 - **冻结 · 记录不判定**：`verify/visual/baseline/`（模板继承的**旧项目**图库，本项目不参与比对、禁止 `visual.js shoot` 覆盖）
 - **待办**：P1 字幕（烧画面/软轨）或 P2 配音评估（见 `ROADMAP.md`）
