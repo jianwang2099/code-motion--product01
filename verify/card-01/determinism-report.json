@@ -1,0 +1,38 @@
+{
+  "card": "01",
+  "what": "C3 确定性：同一 plan 渲染两遍，逐张 md5 必须完全一致",
+  "url": "http://127.0.0.1:5174/index.html?video=1&duration=24&fps=60",
+  "plan": "video/plan.js",
+  "fps": 60,
+  "duration": 24,
+  "totalFrames": 1440,
+  "run1": {
+    "dir": "video/frames",
+    "files": 1440,
+    "manifestSha256": "310c230b54964a9050c28ace838b6daae22e568972cc5274c1c6775620eae5e1"
+  },
+  "run2": {
+    "dir": "video/frames-run2",
+    "files": 1440,
+    "manifestSha256": "310c230b54964a9050c28ace838b6daae22e568972cc5274c1c6775620eae5e1"
+  },
+  "fileNameSetEqual": true,
+  "perFrameMismatchCount": 0,
+  "firstMismatch": null,
+  "sampleFrames": {
+    "frame_00000.png": {
+      "run1": "d33cdb9e3e215e56931f04e631ec62d0",
+      "run2": "d33cdb9e3e215e56931f04e631ec62d0"
+    },
+    "frame_00720.png": {
+      "run1": "12541c56ba01eb6f603b64f4224d1a08",
+      "run2": "12541c56ba01eb6f603b64f4224d1a08"
+    },
+    "frame_01439.png": {
+      "run1": "604162758053cd299ff2e449743b9038",
+      "run2": "604162758053cd299ff2e449743b9038"
+    }
+  },
+  "verdict": "PASS",
+  "note": "manifestSha256 = 按帧号排序的 \"文件名 md5\" 行拼接（\\n）后的 sha256；逐帧清单不落盘以控制体积，可用本脚本一键重算复核。"
+}

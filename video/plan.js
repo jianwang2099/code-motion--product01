@@ -1,0 +1,48 @@
+#!/usr/bin/env node
+'use strict';
+/**
+ * video/plan.js · 《元素周期表简介》24 秒成片的时间轴 provider
+ * ---------------------------------------------------------------------------
+ * 叙事型作品：**整条时间轴由页面按帧号自己算**（见 index.html 的 renderFrame(n)），
+ * 所以这里不产生任何逐帧动作 —— `actions` 全填 null。
+ * 渲染器只要求返回值形状合规（见 video/VIDEO-MODE-CONTRACT.md §2.2）：
+ *   fps / duration / totalFrames / actions（长度 = totalFrames）/ log / shots
+ *
+ * 本片无脚本化输入（无拖拽/点击/按键），故不涉及 setDrag / release。
+ *
+ * 三段叙事（与 storyboard/card-01.md《画面与时间轴》一致）：
+ *   ① 0–419    铺装周期表（36 格散落 → 归位，待机呼吸不停帧）
+ *   ② 420–1019 逐族扫过（碱金属 → 卤素 → 稀有气体，匀速扫描条）
+ *   ③ 1020–1439 点开碳原子（放大到中央 + 旋转电子云）
+ */
+
+module.exports.solve = async function solve(session, cfg) {
+  void session;                                  /* 无需离线求解：页面状态是帧号的纯函数 */
+  const fps = cfg.fps;
+  const duration = cfg.duration;
+  const totalFrames = Math.round(fps * duration);
+
+  const actions = new Array(totalFrames).fill(null);   /* 时间轴由页面按帧号自算 */
+
+  return {
+    fps,
+    duration,
+    totalFrames,
+    actions,
+    log: [
+      '《元素周期表简介》· 前 36 号元素 · ' + fps + 'fps · ' + duration + 's = ' + totalFrames + ' 帧',
+      '时间轴由页面按帧号自算（actions 全 null）：① 0–419 铺装 · ② 420–1019 逐族扫过 · ③ 1020–1439 点开碳原子'
+    ],
+    shots: [
+      { index: 0, label: '① 起手：36 格散落（未归位）' },
+      { index: 329, label: '① 末帧：归位完成（待机呼吸中）' },
+      { index: 420, label: '② 起手：碱金属段开始，扫描条入场' },
+      { index: 620, label: '② 卤素段开始' },
+      { index: 820, label: '② 稀有气体段开始' },
+      { index: 1019, label: '② 末帧：第三族扫过结束' },
+      { index: 1020, label: '③ 起手：碳格开始放大' },
+      { index: 1100, label: '③ 放大完成：碳在中央 + 电子云' },
+      { index: 1439, label: '③ 末帧：成片收尾' }
+    ]
+  };
+};

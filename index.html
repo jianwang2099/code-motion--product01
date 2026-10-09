@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>元素周期表简介 · 24s 视频渲染页（?video=1）</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #080b18; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .hud {
+    position: fixed; left: 16px; bottom: 14px; z-index: 10;
+    color: #9fe8ff; font: 18px/1.5 ui-monospace, Menlo, monospace;
+    background: rgba(4, 8, 20, 0.62); border: 1px solid rgba(95, 227, 255, 0.28);
+    border-radius: 8px; padding: 6px 12px;
+  }
+  .hud kbd { color: #ff5fa2; }
+</style>
+</head>
+<body>
+<canvas id="stage" width="1920" height="1080"></canvas>
+<div class="hud" id="hud">
+  <kbd>n</kbd> <span id="hudN">0</span> · <kbd>←/→</kbd> 步进一帧 · <kbd>空格</kbd> 播放/暂停（<span id="hudPlay">停止</span>）
+</div>
+
+<script>
+/* ============================================================================
+ * 《元素周期表简介》· 24 秒纯画面动画（canvas 2D）
+ *
+ * 设计铁律（对应 storyboard/card-01.md）：
+ *   1. 一切视觉量只由「帧号 n」算出，**不读挂钟**（无 performance.now / Date.now
+ *      参与时间轴；仅键盘自动播放用定时器决定"再画一次"，不参与状态计算）。
+ *   2. **全程无静止帧**：①有待机呼吸、②有匀速扫描条、③有旋转电子云——
+ *      相邻两帧在 1920×1080 下必然不同（卡 01 C2 的机械判据）。
+ *   3. 演示物是**给流水线喂的素材**：`?video=1` 时才挂 window.__video。
+ *   4. 默认模式另起 rAF 主循环；视频模式下**绝不启动**（否则相位被额外推进）。
+ *
+ * 契约：VIDEO-MODE-CONTRACT.md（12 组成员；本片无输入，故不含 setDrag/release）。
+ * ========================================================================== */
+(function () {
+  'use strict';
+
+  var cvs = document.getElementById('stage');
+  var ctx = cvs.getContext('2d');
+  var W = cvs.width, H = cvs.height;
+  var PI2 = Math.PI * 2;
+
+  /* ========================== ① 构图与数据 ========================== */
+
+  var COLS = 18, ROWS = 4;
+  var TILE_W = 76, TILE_H = 120, GAP_X = 20, GAP_Y = 20;
+  var GRID_W = COLS * TILE_W + (COLS - 1) * GAP_X;      /* 1708 */
+  var GRID_H = ROWS * TILE_H + (ROWS - 1) * GAP_Y;      /* 540  */
+  var GRID_X = (W - GRID_W) / 2;                        /* 106  */
+  var GRID_Y = 270;
+
+  /* 前 36 号元素（H–Kr）。字段：[序号, 符号, 中文名, 周期(1..4), 列(0..17)]。
+     组别用于②逐族扫过：第 1 列=碱金属 / 第 17 列=卤素 / 第 18 列=稀有气体。
+     位置由「周期 + 列」直接算出，不做二次推导（曾因下标取错把整表压成一行）。 */
+  var EL = [
+    [1, 'H', '氢', 1, 0], [2, 'He', '氦', 1, 17],
+    [3, 'Li', '锂', 2, 0], [4, 'Be', '铍', 2, 1], [5, 'B', '硼', 2, 12], [6, 'C', '碳', 2, 13],
+    [7, 'N', '氮', 2, 14], [8, 'O', '氧', 2, 15], [9, 'F', '氟', 2, 16], [10, 'Ne', '氖', 2, 17],
+    [11, 'Na', '钠', 3, 0], [12, 'Mg', '镁', 3, 1], [13, 'Al', '铝', 3, 12], [14, 'Si', '硅', 3, 13],
+    [15, 'P', '磷', 3, 14], [16, 'S', '硫', 3, 15], [17, 'Cl', '氯', 3, 16], [18, 'Ar', '氩', 3, 17],
+    [19, 'K', '钾', 4, 0], [20, 'Ca', '钙', 4, 1], [21, 'Sc', '钪', 4, 2], [22, 'Ti', '钛', 4, 3],
+    [23, 'V', '钒', 4, 4], [24, 'Cr', '铬', 4, 5], [25, 'Mn', '锰', 4, 6], [26, 'Fe', '铁', 4, 7],
+    [27, 'Co', '钴', 4, 8], [28, 'Ni', '镍', 4, 9], [29, 'Cu', '铜', 4, 10], [30, 'Zn', '锌', 4, 11],
+    [31, 'Ga', '镓', 4, 12], [32, 'Ge', '锗', 4, 13], [33, 'As', '砷', 4, 14], [34, 'Se', '硒', 4, 15],
+    [35, 'Br', '溴', 4, 16], [36, 'Kr', '氪', 4, 17]
+  ].map(function (a) {
+    var row = a[3] - 1, col = a[4];
+    return {
+      z: a[0], sym: a[1], name: a[2], group: col + 1, period: a[3],
+      col: col, row: row,
+      x: GRID_X + col * (TILE_W + GAP_X) + TILE_W / 2,
+      y: GRID_Y + row * (TILE_H + GAP_Y) + TILE_H / 2
+    };
+  });
+  var CARBON = EL.filter(function (e) { return e.z === 6; })[0];
+
+  /* 三个族（② 逐族扫过）：各 200 帧，420 / 620 / 820 起 */
+  var FAMILIES = [
+    { key: 'alkali', group: 1, label: '碱金属 · Alkali metals', start: 420, accent: '#ffd166' },
+    { key: 'halogen', group: 17, label: '卤素 · Halogens', start: 620, accent: '#7dffb0' },
+    { key: 'noble', group: 18, label: '稀有气体 · Noble gases', start: 820, accent: '#c79bff' }
+  ];
+  FAMILIES.forEach(function (f) {
+    f.members = EL.filter(function (e) { return e.group === f.group; });
+  });
+
+  /* ========================== ② 纯函数工具 ========================== */
+
+  function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+  function easeInOutCubic(t) { t = clamp(t, 0, 1); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function alphaHex(a) { return ('0' + Math.round(clamp(a, 0, 1) * 255).toString(16)).slice(-2); }
+  function roundRect(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  /* 六位 hex → rgba 串；a 为 0..1 */
+  function rgba(hex, a) {
+    var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + clamp(a, 0, 1) + ')';
+  }
+  var IDLE_PERIOD = 120;                                  /* 待机呼吸周期（帧，2 秒） */
+  function idleOf(n) { return 0.5 + 0.5 * Math.sin(PI2 * n / IDLE_PERIOD); }
+  /* 背景呼吸：与 idle 同周期但相位偏移，振幅 8 px —— 保证任何两帧的背景都有可见位移 */
+  function breathOf(n) { return Math.sin(PI2 * (n - 30) / IDLE_PERIOD) * 8; }
+
+  /* ========================== ③ 逐帧状态 ========================== */
+
+  /**
+   * 归位进度：第 i 格延迟 i*3.5 帧，用 330 帧走完 → 最晚一格（i=35）在第 122.5 帧才起步。
+   * ③ 之后（n ≥ 1020）碳格改由 stage3 接管，本函数只服务 ① 的散落→归位。
+   */
+  function assembleP(n, i) { return easeInOutCubic(clamp((n - i * 3.5) / 330, 0, 1)); }
+
+  /**
+   * 散落起点（第 i 格）：确定性哈希 + 夹紧。
+   * ⚠️ 不能用 `(i*127)%361` 这种线性取模：相邻序号的取值高度相关，
+   *    36 个格子会重叠成一团、且全挤在画面左侧（实测踩过）。
+   *    xorshift 混淆后相邻序号的偏移互不相关，散落才真的"散"。
+   * 夹紧在 ±185：最坏情况格心 x = 1774（右边界 1812 < 1920）、y 也不出画 ✔
+   */
+  function hash32(i, salt) {
+    var h = (i * 2654435761 + salt * 40503 + 0x9e3779b9) >>> 0;
+    h ^= h >>> 15; h = (h * 2246822519) >>> 0;
+    h ^= h >>> 13; h = (h * 3266489917) >>> 0;
+    h ^= h >>> 16;
+    return h >>> 0;
+  }
+  function scatterOffset(i) {
+    var sx = (hash32(i, 1) % 361) - 180;
+    var sy = (hash32(i, 2) % 371) - 185;
+    return [clamp(sx, -185, 185), clamp(sy, -185, 185)];
+  }
+
+  function familyOf(n) {
+    for (var i = 0; i < FAMILIES.length; i++) if (n >= FAMILIES[i].start && n < FAMILIES[i].start + 200) return FAMILIES[i];
+    return null;
+  }
+  function highlightOn(n, fam, k) { return clamp((n - (fam.start + k * 12)) / 30, 0, 1); }
+  function familyLabelAlpha(n, fam) {
+    var a = clamp((n - fam.start) / 40, 0, 1);
+    var b = clamp((fam.start + 200 - n) / 40, 0, 1);
+    return Math.min(a, b);
+  }
+  /* ③ 碳格「放大到中央」的进度：1020–1100 用 easeInOutCubic，之后恒 1 */
+  function stage3P(n) { return easeInOutCubic(clamp((n - 1020) / 80, 0, 1)); }
+
+  /* ========================== ④ 绘制 ========================== */
+
+  function drawBackground(n) {
+    var br = breathOf(n);
+    var g = ctx.createLinearGradient(0, br, W * 0.35 + br, H + br);
+    g.addColorStop(0, '#080b18');
+    g.addColorStop(1, '#0d1430');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    /* 背景网格线「生长」：0–330 帧由中心向两侧展开，之后保持；alpha 随待机呼吸微变 */
+    var gp = easeInOutCubic(clamp(n / 330, 0, 1));
+    var idle = idleOf(n);
+    var cx = W / 2, cy = GRID_Y + GRID_H / 2;
+    var halfH = (GRID_H / 2 + GAP_Y) * gp;          /* 生长中线段只延伸 gp 比例 */
+    var halfW = (GRID_W / 2 + GAP_X) * gp;
+    ctx.strokeStyle = 'rgba(95,227,255,' + (0.10 + 0.05 * idle).toFixed(3) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (var c = 0; c <= COLS; c++) {
+      var x = GRID_X - GAP_X / 2 + c * (TILE_W + GAP_X);
+      ctx.moveTo(x, cy - halfH);
+      ctx.lineTo(x, cy + halfH);
+    }
+    for (var r = 0; r <= ROWS; r++) {
+      var y = GRID_Y - GAP_Y / 2 + r * (TILE_H + GAP_Y);
+      ctx.moveTo(cx - halfW, y);
+      ctx.lineTo(cx + halfW, y);
+    }
+    ctx.stroke();
+  }
+
+  /* 每个格子的"当前外观"：位置 / 缩放 / 旋转 / 描边 / 光晕 / 填充 */
+  function tileView(n, e, idx) {
+    var p = assembleP(n, idx);
+    var idle = idleOf(n);
+    var breath = breathOf(n);
+    var scale = 1 + 0.03 * idle;                 /* 振幅 3%：相邻帧的缩放差在 1080p 下必然可见 */
+    var rot = ((idx * 37) % 21 - 10) * 0.012 * (1 - p);
+    var so = scatterOffset(idx);
+    var x0 = e.x + so[0], y0 = e.y + so[1];
+    var x = x0 + (e.x - x0) * p + breath;        /* 待机期整格随背景一起呼吸 → 每帧必动 */
+    var y = y0 + (e.y - y0) * p;
+    var on = 0, accent = '#5fe3ff';
+    var fam = familyOf(n);
+    if (fam && e.group === fam.group) {
+      on = highlightOn(n, fam, fam.members.indexOf(e));
+      accent = fam.accent;
+    }
+
+    /* ③ 碳格放大到中央；其余格子压暗 */
+    if (n >= 1020) {
+      var q = stage3P(n);
+      if (e.z === 6) {
+        x = e.x + (W / 2 - e.x) * q + breath;
+        y = e.y + (560 - e.y) * q;
+        scale = (1 + 0.03 * idle) + (2.4 - 1) * q;
+      } else {
+        scale = (1 + 0.03 * idle) * (1 - 0.05 * q);
+      }
+    }
+
+    /* 描边：底色随呼吸；高亮时换族色（在待机基准上再抬） */
+    var aIdle = 0.38 + 0.16 * idle;
+    var a = Math.max(aIdle, 0.9 * on);
+    var cx0 = 120, cy0 = 200, cb0 = 255;
+    var r0 = 120 + (255 - 120) * on, g0 = 200 + (255 - 200) * on;
+    var stroke = on > 0.02
+      ? 'rgba(' + Math.round(r0) + ',' + Math.round(g0) + ',' + cb0 + ',' + a.toFixed(3) + ')'
+      : 'rgba(120,200,255,' + a.toFixed(3) + ')';
+
+    return {
+      x: x, y: y, scale: scale, rot: rot, on: on, accent: accent,
+      stroke: stroke, glow: 28 * on, lw: 2 + 2 * on,
+      fillA: 0.05 + 0.04 * idle,
+      dim: (n >= 1020 && e.z !== 6) ? 0.62 * stage3P(n) : 0,
+      textA: 1
+    };
+  }
+
+  function drawTile(n, view, e, isHero) {
+    ctx.save();
+    ctx.translate(view.x, view.y);
+    ctx.rotate(view.rot);
+    ctx.scale(view.scale, view.scale);
+    ctx.globalAlpha = 1 - view.dim;
+
+    var hw = TILE_W / 2, hh = TILE_H / 2;
+
+    ctx.fillStyle = 'rgba(255,255,255,' + view.fillA.toFixed(3) + ')';
+    roundRect(-hw, -hh, TILE_W, TILE_H, 8);
+    ctx.fill();
+
+    ctx.strokeStyle = view.stroke;
+    ctx.lineWidth = view.lw;
+    /* 只在真需要光晕时开 shadowBlur：36 格 × 每帧两次模糊调用是渲染速度的头号开销
+       （实测 9.1 → 6.0 帧/s）。未高亮时 glow 为 0，视觉完全等价。 */
+    if (view.glow > 0.5) {
+      ctx.shadowColor = rgba(isHero ? '#9fe8ff' : '#5fe3ff', 0.85);
+      ctx.shadowBlur = view.glow;
+    }
+    roundRect(-hw, -hh, TILE_W, TILE_H, 8);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    /* ③ 主角：绕格子转的「进度弧」——周期 330 帧，保证 1100–1439 段也有连续变化 */
+    if (isHero) {
+      var t = ((n % 330) / 330) * PI2 - Math.PI / 2;
+      ctx.strokeStyle = 'rgba(159,232,255,0.95)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, hh + 16, t, t + PI2 * 0.74);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = (1 - view.dim) * view.textA;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '18px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = view.on > 0.35 ? rgba(view.accent, 0.95) : 'rgba(150,180,215,0.85)';
+    ctx.fillText(String(e.z), 0, -hh + 20);
+    ctx.font = '30px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = view.on > 0.02 ? 'rgba(255,255,255,0.98)' : 'rgba(226,240,255,0.96)';
+    ctx.fillText(e.sym, 0, 2);
+    ctx.font = '17px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = 'rgba(160,190,225,0.72)';
+    ctx.fillText(e.name, 0, hh - 22);
+
+    ctx.restore();
+  }
+
+  function drawTitle(n) {
+    var a = easeInOutCubic(clamp(n / 90, 0, 1));
+    if (a <= 0.001) return;
+    var y = 96 + (1 - a) * 18;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '64px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = 'rgba(232,246,255,0.97)';
+    ctx.shadowColor = 'rgba(95,227,255,0.55)';
+    ctx.shadowBlur = 24;
+    ctx.fillText('元素周期表简介', W / 2, y);
+    ctx.shadowBlur = 0;
+    ctx.font = '26px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = 'rgba(140,175,210,0.9)';
+    ctx.fillText('THE PERIODIC TABLE · 118 ELEMENTS', W / 2, y + 52);
+    ctx.restore();
+  }
+
+  function drawScanBar(n) {
+    if (n < 420 || n > 1019) return;
+    var idle = idleOf(n);
+    var x = 60 + (n - 420) / 600 * 1800;
+    var top = GRID_Y - GAP_Y - 24, bot = GRID_Y + GRID_H + GAP_Y + 24;
+    ctx.save();
+    var g = ctx.createLinearGradient(x, 0, x + 6, 0);
+    g.addColorStop(0, 'rgba(95,227,255,' + (0.30 + 0.12 * idle).toFixed(3) + ')');
+    g.addColorStop(0.5, 'rgba(159,232,255,' + (0.72 + 0.16 * idle).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(95,227,255,' + (0.30 + 0.12 * idle).toFixed(3) + ')');
+    ctx.fillStyle = g;
+    ctx.fillRect(x, top, 6, bot - top);
+    ctx.shadowColor = 'rgba(95,227,255,0.75)';
+    ctx.shadowBlur = 22;
+    ctx.fillRect(x, top, 6, bot - top);
+    ctx.restore();
+  }
+
+  function drawFamilyLabel(n) {
+    var fam = familyOf(n);
+    if (!fam) return;
+    var a = familyLabelAlpha(n, fam);
+    if (a <= 0.001) return;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '40px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = fam.accent;
+    ctx.shadowColor = rgba(fam.accent, 0.6);
+    ctx.shadowBlur = 20;
+    ctx.fillText(fam.label, W / 2, 210);
+    ctx.restore();
+  }
+
+  /* ③ 电子云：核 + K 层 2 点 + L 层 4 点；反向旋转 + 半径脉动（打破 180° 自同构）
+   * 半径按碳格的放大倍数 q 一起放大，否则轨道会缩在格子里、核还会挡住元素符号。 */
+  function drawElectronCloud(n) {
+    var q = stage3P(n);
+    if (q <= 0.01) return;
+    var sc = 1 + 1.4 * q;                        /* 与碳格 scale 同步：1.0 → 2.4 */
+    var rk = 170 * sc, rl = 300 * sc;
+    var idle = idleOf(n);
+    var nx = W / 2, ny = 560;
+
+    ctx.save();
+    ctx.globalAlpha = q;
+    ctx.strokeStyle = 'rgba(95,227,255,' + (0.20 + 0.08 * idle).toFixed(3) + ')';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(nx, ny, rk, 0, PI2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(nx, ny, rl, 0, PI2); ctx.stroke();
+
+    /* 核 */
+    ctx.beginPath();
+    ctx.arc(nx, ny, (26 + 2 * idle) * sc, 0, PI2);
+    ctx.fillStyle = 'rgba(255,214,120,0.95)';
+    ctx.shadowColor = 'rgba(255,196,90,0.9)';
+    ctx.shadowBlur = 26 + 8 * idle;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    /* 电子点 */
+    function dot(theta, r, s) {
+      ctx.beginPath();
+      ctx.arc(nx + Math.cos(theta) * r, ny + Math.sin(theta) * r, s, 0, PI2);
+      ctx.fillStyle = 'rgba(159,232,255,0.98)';
+      ctx.shadowColor = 'rgba(95,227,255,0.9)';
+      ctx.shadowBlur = 14;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    var base = PI2 * n / 60;
+    var i;
+    for (i = 0; i < 2; i++) {
+      var tk = base * 0.37 + i * Math.PI;
+      dot(tk, rk + 10 * Math.sin(3 * tk + PI2 * n / 37), 7 * sc * 0.8);
+    }
+    for (i = 0; i < 4; i++) {
+      var tl = base * 0.19 + i * Math.PI / 2;
+      dot(tl, rl + 10 * Math.sin(3 * tl + PI2 * n / 41), 7 * sc * 0.8);
+    }
+    ctx.restore();
+  }
+
+  function drawLegend(n) {
+    var q = stage3P(n);
+    if (q <= 0.02) return;
+    ctx.save();
+    ctx.globalAlpha = q;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '20px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = 'rgba(140,175,210,0.85)';
+    ctx.fillText('K 层 2 电子 · L 层 4 电子', W / 2, 830);
+    ctx.restore();
+  }
+
+  /** 把第 n 帧整体画出来（纯绘制，不推进任何状态） */
+  function renderFrame(n) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
+    drawBackground(n);
+    drawTitle(n);
+
+    /* 后画的在上层：① 散落中的格子可能互相压盖，按序号排序保持稳定 */
+    for (var i = 0; i < EL.length; i++) {
+      var e = EL[i];
+      var isHero = (n >= 1020 && e.z === 6);
+      if (isHero) continue;                       /* 主角最后画 */
+      drawTile(n, tileView(n, e, i), e, false);
+    }
+    if (n >= 1020) {
+      var heroIdx = EL.indexOf(CARBON);
+      /* 先画碳格再叠电子云：核要盖在格子上（否则被格子填充压住、还挡住元素符号） */
+      drawTile(n, tileView(n, CARBON, heroIdx), CARBON, true);
+      drawElectronCloud(n);
+      drawLegend(n);
+    }
+
+    drawScanBar(n);
+    drawFamilyLabel(n);
+  }
+
+  /* ========================== ⑤ 静态模式预览 ========================== */
+
+  var hudN = document.getElementById('hudN');
+  var hudPlay = document.getElementById('hudPlay');
+  var previewFrame = 0;
+  var previewPlaying = true;
+  var previewLoopId = null;
+  var previewTimerId = null;
+
+  function paintPreview() {
+    renderFrame(previewFrame);
+    hudN.textContent = String(previewFrame);
+  }
+  function previewStep() {
+    previewFrame = (previewFrame + 1) % 1440;
+    hudPlay.textContent = '播放中';
+    paintPreview();
+  }
+  function previewLoop() {
+    if (!previewPlaying) { previewLoopId = null; return; }
+    previewStep();
+    previewLoopId = requestAnimationFrame(previewLoop);
+  }
+  function startPreviewLoop() {
+    if (previewLoopId === null && previewPlaying) previewLoopId = requestAnimationFrame(previewLoop);
+  }
+  function stopPreviewLoop() {
+    if (previewLoopId !== null) { cancelAnimationFrame(previewLoopId); previewLoopId = null; }
+  }
+  function setPlaying(on) {
+    previewPlaying = on;
+    hudPlay.textContent = on ? '播放中' : '暂停';
+    if (on) startPreviewLoop(); else stopPreviewLoop();
+  }
+
+  /* ========================== ⑥ 视频渲染模式（?video=1） ==========================
+   * 只改样板注释标注的地方：reset / stepFrame / render，
+   * 并整段删除 setDrag / release（本片无脚本化输入）。
+   * 静态模式（本文件上半部分）另起 rAF 循环，与这里互不干扰。
+   * ========================================================================== */
+
+  var VIDEO_W = 1920, VIDEO_H = 1080;          /* 固定输出分辨率 */
+  var VIDEO_FPS = 60;                          /* 固定帧率 */
+  var VIDEO_DURATION_DEFAULT = 24;             /* ▲改这里：默认 24 秒（与 video/plan.js 一致） */
+  var FIXED_DT = 1 / 120;                      /* 定长步长 —— 不许读挂钟 */
+  var STEPS_PER_FRAME = Math.round((1 / VIDEO_FPS) / FIXED_DT);   /* 60fps → 恰好 2 步 */
+
+  var VIDEO_MODE = false, VIDEO_PARAMS = {};
+  try {
+    if (typeof location !== 'undefined' && location && typeof location.search === 'string') {
+      location.search.replace(/^[?]/, '').split('&').forEach(function (kv) {
+        if (!kv) return;
+        var eq = kv.indexOf('=');
+        var key = eq < 0 ? kv : kv.slice(0, eq);
+        var sval = eq < 0 ? '' : kv.slice(eq + 1);
+        try { VIDEO_PARAMS[decodeURIComponent(key)] = decodeURIComponent(sval); }
+        catch (err) { VIDEO_PARAMS[key] = sval; }
+      });
+      VIDEO_MODE = VIDEO_PARAMS.video === '1';
+    }
+  } catch (err) { VIDEO_MODE = false; }
+
+  var videoDuration = VIDEO_DURATION_DEFAULT;
+  if (VIDEO_MODE && VIDEO_PARAMS.duration !== undefined) {
+    var durParsed = parseFloat(VIDEO_PARAMS.duration);
+    if (isFinite(durParsed) && durParsed > 0) videoDuration = durParsed;
+  }
+  var videoFrameIndex = 0, videoSimSteps = 0;
+  function videoTotalFrames() { return Math.round(videoDuration * VIDEO_FPS); }
+
+  /* ▲改这里：第 0 帧的干净初始态（不渲染、不重跑昂贵布局） */
+  function reset() {
+    videoFrameIndex = 0;
+    videoSimSteps = 0;
+  }
+
+  /* 推进恰好 1/VIDEO_FPS 秒 —— 不渲染。第 n 帧只由帧号/步数决定，绝不读挂钟。 */
+  function stepFrame() {
+    for (var i = 0; i < STEPS_PER_FRAME; i++) {
+      void FIXED_DT;                            /* 定长步：本片状态是帧号的纯函数，步长仅用于自证 */
+      videoSimSteps++;
+    }
+    videoFrameIndex++;
+  }
+
+  /* 快速推进 n 帧（不渲染）：给离线求解器一次跑几千帧用 */
+  function simulateFrames(n) {
+    var total = Math.max(0, Math.floor(n));
+    for (var i = 0; i < total; i++) stepFrame();
+  }
+
+  /* 把当前状态画出来（不推进时间） */
+  function render() {
+    renderFrame(videoFrameIndex);
+  }
+
+  /* 提交一帧：先 render()，再等 2 个 rAF —— 保证画面真上屏之后抓图时序才稳 */
+  function commit() {
+    return new Promise(function (resolve) {
+      stopPreviewLoop();                        /* 视频模式下不得有预览循环推进相位 */
+      render();
+      requestAnimationFrame(function () { requestAnimationFrame(function () { resolve(); }); });
+    });
+  }
+
+  /* 抓当前画面（canvas 页面适用）。渲染器默认走整屏截图，本方法供其他调用方使用。 */
+  function captureFrame() {
+    render();
+    return cvs.toDataURL('image/png');
+  }
+
+  if (VIDEO_MODE) {
+    window.__video = {
+      get active() { return true; },
+      get fps() { return VIDEO_FPS; },
+      get width() { return VIDEO_W; },
+      get height() { return VIDEO_H; },
+      get duration() { return videoDuration; },
+      set duration(sec) {
+        var v = Number(sec);
+        if (isFinite(v) && v > 0) videoDuration = v;    /* 非法值忽略，时间轴永远有限 */
+      },
+      get totalFrames() { return videoTotalFrames(); },
+      get frameIndex() { return videoFrameIndex; },
+      get simSteps() { return videoSimSteps; },
+      reset: reset,
+      stepFrame: stepFrame,
+      simulateFrames: simulateFrames,
+      render: render,
+      commit: commit,
+      captureFrame: captureFrame
+    };
+    var hudEl = document.querySelector('.hud');
+    if (hudEl && hudEl.style && VIDEO_PARAMS.hud !== '1') hudEl.style.display = 'none';
+    /* ⚠ 视频模式下不启动 rAF 主循环：抓图本身会强制渲染，
+       自带主循环会让相位被额外推进、时间轴不再可复现。 */
+  } else {
+    /* 静态模式：rAF 预览循环 + 键盘操作（视频模式绝不进入这里） */
+    window.addEventListener('keydown', function (ev) {
+      if (ev.key === 'ArrowRight') { setPlaying(false); previewFrame = (previewFrame + 1) % 1440; paintPreview(); }
+      else if (ev.key === 'ArrowLeft') { setPlaying(false); previewFrame = (previewFrame + 1439) % 1440; paintPreview(); }
+      else if (ev.key === ' ') { ev.preventDefault(); setPlaying(!previewPlaying); }
+      else if (ev.key === 'n' || ev.key === 'N') { setPlaying(false); previewFrame = (previewFrame + 1) % 1440; paintPreview(); }
+      else if (ev.key === 'p' || ev.key === 'P') { setPlaying(false); previewFrame = (previewFrame + 120) % 1440; paintPreview(); }
+    });
+    previewTimerId = setInterval(function () {
+      if (!previewPlaying) return;
+      startPreviewLoop();                       /* rAF 在后台标签页会被暂停，用定时器兜底 */
+      if (previewFrame % 60 === 0) hudN.textContent = String(previewFrame);
+    }, 250);
+    void previewTimerId;
+    setPlaying(true);
+    paintPreview();
+  }
+})();
+</script>
+</body>
+</html>
