@@ -17,9 +17,24 @@
 | **指纹（md5 + 行数）** | · 成片 `video/out/periodic-table-24s.mp4` md5 **`c0a0648900c1b50a50c4d12185581b09`**，**12487236** bytes = 11.91 MB<br>· `index.html` md5 `3c7e33df765ab613c3f7c1131eefc017`，**589** 行<br>· `video/plan.js` md5 `38a8935af2061adaf05c8672fc5a3870`，**48** 行<br>· `verify/card-01/gate.js` md5 `2c23ce6c29d0d5fc5ac3248c36192f25`，**288** 行<br>· `verify/card-01/video-frames-check.js` md5 `846788ebd11b3ddf7c14547f3b59679f`，**172** 行 |
 | **版本反查表** | · `e8cc155` = 模板骨架首次提交<br>· `319d6a2` = 卡 01 立项（审卡整改后 PM 确认下发）<br>· 卡 01 实现提交 + tag `v1-card01-periodic-table` = 见 `git log`（附注 tag 消息含成片 md5） |
 | 已完成的卡 | `卡 01`（**PM 已验收通过**，2026-10-09） |
-| 已验收待 tag | `（无 —— 收尾流水线执行中：commit → tag → 推送 → docs → main --ff-only → ls-remote）` |
+| 已验收待 tag | `（无）` |
 | 下一张卡 | 待定：P1 字幕（烧画面/软轨）或 P2 配音评估（见 `ROADMAP.md`） |
-| 门禁计数（实测） | · `node verify/card-01/gate.js` → **46 passed, 0 failed**（exit 0，含 C3 确定性真比对）<br>· `node verify/card-01/video-frames-check.js`（run2 在场）→ **17 passed, 1 failed**（唯一失败项为"run2 未删"，删除后转绿；见 `verify/card-01/determinism-report.json`） |
+| 门禁计数（实测） | · `node verify/card-01/gate.js` → **46 passed, 0 failed**（exit 0）<br>· `node verify/card-01/gate.js`（run2 在场，C3 真比对）→ **47 passed, 1 failed**（唯一失败项为"run2 未删"，删除后转绿）<br>· `node verify/card-01/make-determinism-report.js` → **PASS**（两遍 manifest sha256 相同） |
+
+### 收尾流水线实测（2026-10-09）
+
+| 步骤 | 命令 | 实测结果 |
+|---|---|---|
+| ① 功能分支提交 | `git commit` | `fa958fd feat(card-01): 《元素周期表简介》24 秒纯画面成片…` ✔ |
+| ② 附注 tag（指向**实现提交**） | `git tag -a v1-card01-periodic-table` | tag 对象 `727dc55`，`git rev-list -n1` → `fa958fd…`（= 实现提交，非其后的记录提交）✔ |
+| ③ 台账 docs 提交 | `git commit`（本条记录所在提交） | 见 `git log` ✔ |
+| ④ 显式推送分支 | `git push origin card/01-periodic-table-24s` | ✘ **exit 128**：`'origin' does not appear to be a git repository` |
+| ④ 显式推送 tag | `git -c http.version=HTTP/1.1 push origin v1-card01-periodic-table` | ✘ **exit 128**：同上 |
+| ⑤ `main --ff-only` | `git merge --ff-only` | 见下方"main 落地"行 |
+| ⑥ `ls-remote` 自证 | `git ls-remote --heads --tags origin` | ✘ **exit 128**：无 remote，无法自证 |
+
+**未完成项（如实记录）**：本仓库 **`git remote -v` 实测为空**，因此**第 ④/⑥ 步（显式推送 + `ls-remote` 自证）无法执行**。
+按全局铁律"**无法快进/无远程就停下来问人**"，此处**停下等 PM 给出远程地址**，不伪称已推送。
 | 运行 / 预览方式 | 静态预览页 `http://127.0.0.1:5174/index.html`；出片为素材页 `...?video=1&duration=24&fps=60`。服务是导演起的**受管后台作业**（`python3 -m http.server 5174 --bind 127.0.0.1`，cwd=工作区根），**不要重复启动** |
 | 权限 / 环境 | 沙箱 `danger-full-access`、审批 `ask`；Node v22.23.1 / ffmpeg+ffprobe 8.1.1 / 无头 Edge；**5173 被旧项目占用**。实测出片速度 **5.7 帧/s**（1440 帧 251 s） |
 
